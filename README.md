@@ -3,6 +3,9 @@
 Runamuck is a Nintendo Entertainment System (NES) emulator project written in
 C++20.
 
+**Status:** Early development; this is not yet a playable emulator. The PPU,
+controller input, SDL frontend, and executable runner are not implemented.
+
 ## Compatibility goal
 
 The long-term goal is to play NES ROMs broadly, not just games using NROM.
