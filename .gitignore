@@ -1,0 +1,17 @@
+# CMake output
+/build/
+/out/
+/CMakeFiles/
+/CMakeCache.txt
+/Testing/
+/CMakeUserPresets.json
+
+# Visual Studio
+/.vs/
+*.obj
+*.exe
+*.pdb
+*.ilk
+
+# NES ROM files
+*.nes
