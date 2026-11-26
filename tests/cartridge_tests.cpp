@@ -100,6 +100,16 @@ void testLoadsMapperAndRomData() {
     require(!cartridge.hasChrRam(), "CHR ROM is not reported as CHR RAM");
 }
 
+void testLoadsMmc2Mapper() {
+    TemporaryRom rom(makeRom(8, 16, 9));
+    auto cartridge = runamuck::Cartridge::load(rom.path());
+
+    require(cartridge.mapperId() == std::uint16_t{9}, "loads the MMC2 mapper ID");
+    require(cartridge.hasMapper(), "creates an MMC2 mapper");
+    require(cartridge.cpuRead(0x8000) == std::uint8_t{0xa5},
+            "reads the initial MMC2 PRG bank");
+}
+
 void testAllocatesChrRam() {
     TemporaryRom rom(makeRom(1, 0, 2));
     const auto cartridge = runamuck::Cartridge::load(rom.path());
@@ -107,6 +117,31 @@ void testAllocatesChrRam() {
     require(cartridge.hasChrRam(), "zero CHR banks means CHR RAM");
     require(cartridge.chrData().size() == chrBankSize, "allocates 8 KB of CHR RAM");
     require(cartridge.chrData()[0] == 0, "CHR RAM starts zero-initialized");
+}
+
+void testNromCpuAndChrRamAccess() {
+    TemporaryRom rom(makeRom(1, 0, 0));
+    auto cartridge = runamuck::Cartridge::load(rom.path());
+
+    require(cartridge.hasMapper(), "creates an NROM mapper");
+    require(cartridge.cpuRead(0x8000) == std::uint8_t{0xa5}, "reads PRG ROM");
+    require(cartridge.cpuRead(0xc000) == std::uint8_t{0xa5}, "mirrors 16 KB PRG ROM");
+    require(!cartridge.cpuRead(0x5fff), "returns no value for unmapped CPU addresses");
+
+    cartridge.cpuWrite(0x6000, 0x3c);
+    require(cartridge.cpuRead(0x6000) == std::uint8_t{0x3c}, "writes and reads PRG RAM");
+
+    cartridge.ppuWrite(0x0000, 0x42);
+    require(cartridge.ppuRead(0x0000) == std::uint8_t{0x42}, "writes and reads CHR RAM");
+    require(!cartridge.ppuRead(0x2000), "returns no value outside the CHR address range");
+}
+
+void testChrRomIsReadOnly() {
+    TemporaryRom rom(makeRom(1, 1, 0));
+    auto cartridge = runamuck::Cartridge::load(rom.path());
+
+    cartridge.ppuWrite(0x0000, 0x33);
+    require(cartridge.ppuRead(0x0000) == std::uint8_t{0x5a}, "does not write to CHR ROM");
 }
 
 void testRejectsInvalidSignature() {
@@ -128,9 +163,11 @@ void testRejectsInvalidSignature() {
 
 int main() {
     testLoadsMapperAndRomData();
+    testLoadsMmc2Mapper();
     testAllocatesChrRam();
     testRejectsInvalidSignature();
-
+    testNromCpuAndChrRamAccess();
+    testChrRomIsReadOnly();
     std::cout << "All cartridge tests passed.\n";
     return 0;
 }

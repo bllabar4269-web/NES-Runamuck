@@ -15,3 +15,8 @@
 
 # NES ROM files
 *.nes
+
+# Local MMC1 diagnostics for compatibility ROMs
+/Super Dodge Ball (USA)-mmc1-ppu-trace.log
+/Caveman Games (USA)-mmc1-ppu-trace.log
+/Bases Loaded 2 (U)-mmc1-ppu-trace.log

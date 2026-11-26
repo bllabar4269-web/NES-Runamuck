@@ -26,18 +26,37 @@ games, and report unsupported mapper IDs clearly.
 - CPU and NES bus tests pass, including internal RAM mirror checks.
 - iNES 1.0 cartridge loading reads PRG/CHR data, records the mapper ID, and
   allocates CHR RAM when needed; cartridge tests cover these cases and invalid
-  signatures. NES 2.0 parsing and mapper behavior are not yet implemented.
+  signatures. NROM, MMC1, and MMC2 mapper support is implemented; NES 2.0
+  parsing is not yet implemented.
 - Mapper interface defines CPU/PPU address mapping, nametable mirroring, and
-  optional clock/IRQ hooks. NROM address mapping is implemented and tested but
-  is not yet connected to cartridge loading or the system bus.
-- SDL3 and PPU are planned but not yet implemented.
-- Three test games are available for later integration and compatibility
-  testing, once cartridge loading and the PPU are implemented: Super Dodge
-  Ball, Bases Loaded 2, and Mike Tyson's Punch-Out!!.
+  optional clock/IRQ hooks. NROM address mapping is connected to cartridge
+  loading and both CPU and PPU buses.
+- PPU memory, registers, nametable mirroring, background/sprite rendering,
+  sprite-zero-hit, VBlank timing, and a native Win32 visual test runner are
+  implemented.
+- Rendering currently has a scanline path used by default and an experimental
+  per-pixel path selected with `--dot-renderer`. The experimental path now
+  clocks background nametable, attribute, and pattern fetches through shifters,
+  with horizontal and vertical scroll updates on their PPU dots. Sprite
+  CHR data is fetched in ascending OAM order to preserve MMC2 latch behavior;
+  a regression test covers this ordering. Sprite evaluation/fetch timing and
+  CPU-to-PPU sub-instruction timing still need work. Keep the scanline path
+  available as a fallback while improving the timed path.
+- NES controller ports support two serial gamepads. The visual runner uses SDL3
+  for Xbox and PlayStation-compatible controllers, with keyboard fallback
+  (arrows, Z/X, right Shift, Enter).
+- The visual runner window title reports OAM sprite counts, rendered sprite
+  pixels, the PPU mask, loop FPS, and CPU/PPU frame-work time for renderer A/B
+  checks.
+- Three test games are available for compatibility testing: Super Dodge Ball,
+  Bases Loaded 2, and Mike Tyson's Punch-Out!!. Gameplay compatibility remains
+  incomplete.
 
 ## Build and test
 
-The presets use Ninja. With CMake and Ninja installed and available on `PATH`:
+The presets use Ninja. With CMake and Ninja installed and available on `PATH`,
+the first configure downloads the pinned SDL3 release for the Windows visual
+runner:
 
 ```powershell
 cmake --preset debug
@@ -47,15 +66,21 @@ ctest --preset debug
 
 ## Roadmap
 
-1. Connect the tested NROM mapper to cartridge loading and the CPU/PPU buses.
-2. Add mapper support incrementally, including mapper 2 and mapper 9.
-3. Implement the PPU and connect cartridge CHR access.
-4. Add SDL3 video and input.
-5. Improve CPU and whole-system compatibility with the available test games
-   and broader ROM test suites.
+1. Resolve the MMC1 sprite and character visibility problems in Super Dodge
+   Ball and Bases Loaded 2. Punch-Out!! has passed the first three fights and
+   demo checks on the dot renderer; keep comparing representative scenes and
+   recording the window metrics.
+2. Add focused regression coverage for the MMC1, OAM DMA, and sprite-rendering
+   behavior implicated by those games.
+3. Improve dot-renderer timing, especially per-dot sprite evaluation/fetch and
+   CPU-to-PPU sub-instruction timing, while preserving scanline-renderer
+   compatibility.
+4. Add mapper 2 and additional board variants needed by the compatibility ROMs.
+5. Validate against the available games and broader ROM test suites before
+   considering the dot renderer as the default.
 
-`cpu_tests`, `nes_bus_tests`, `cartridge_tests`, and `nrom_mapper_tests` are
-registered with CTest.
+`cpu_tests`, `nes_bus_tests`, `cartridge_tests`, `nrom_mapper_tests`, and
+`ppu_tests` are registered with CTest.
 
 ## Performance guardrails
 
@@ -72,3 +97,20 @@ better. For this emulator:
   overhead as well as cache hits.
 - Preserve behavior with CPU/PPU state and rendered-frame tests alongside
   performance measurements.
+
+## PPU renderer work
+
+The existing scanline renderer is the compatibility fallback and should remain
+available while the timed renderer is developed. `--dot-renderer` selects the
+experimental path, which now models background tile fetches and shift-register
+output per dot. It is still not a fully cycle-accurate PPU: sprite evaluation
+and fetches remain scanline-based, and CPU register writes are applied at
+instruction boundaries.
+
+The next renderer work should validate horizontal/vertical scrolling and
+mid-frame scroll splits against real game frames, then improve per-dot sprite
+evaluation/fetch timing and CPU/PPU phase alignment. PPU bus accesses must
+continue through `PpuBus` so cartridge CHR banking and mapper-controlled
+nametable mirroring remain active. A focused test covers dot-timed background
+fetching; the scanline renderer remains the default until game compatibility is
+confirmed.

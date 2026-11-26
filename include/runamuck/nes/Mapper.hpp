@@ -32,6 +32,9 @@ public:
     virtual MapperMapping mapCpuRead(std::uint16_t address) = 0;
     virtual MapperMapping mapCpuWrite(std::uint16_t address, std::uint8_t value) = 0;
     virtual MapperMapping mapPpuRead(std::uint16_t address) = 0;
+    virtual MapperMapping mapPpuPeek(std::uint16_t address) {
+        return mapPpuRead(address);
+    }
     virtual MapperMapping mapPpuWrite(std::uint16_t address, std::uint8_t value) = 0;
 
     virtual NametableMirroring mirroring() const noexcept = 0;

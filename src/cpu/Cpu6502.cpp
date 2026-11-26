@@ -1,5 +1,7 @@
 #include "runamuck/cpu/Cpu6502.hpp"
 
+#include <ostream>
+
 namespace runamuck {
 
 Cpu6502::Cpu6502(Bus& bus) : bus_(bus) {}
@@ -23,10 +25,44 @@ void Cpu6502::irq() {
 }
 
 std::uint8_t Cpu6502::read(std::uint16_t address) const {
-    return bus_.read(address);
+    const std::uint8_t value = bus_.read(address);
+    if (traceStream_ && address >= 0x2000 && address < 0x4000 &&
+        (address & 0x0007u) == 0x0002u) {
+        ++statusReadCount_;
+        if (statusReadCount_ <= 64 || (statusReadCount_ & 0xffu) == 0) {
+            *traceStream_ << "CPU PPUSTATUS read pc=$" << std::hex
+                          << currentInstructionAddress_ << " opcode=$"
+                          << static_cast<unsigned>(currentOpcode_) << " value=$"
+                          << static_cast<unsigned>(value) << std::dec
+                          << " count=" << statusReadCount_ << '\n';
+        }
+    }
+    return value;
 }
 
 void Cpu6502::write(std::uint16_t address, std::uint8_t value) {
+    if (traceStream_) {
+        if (address == 0x4014) {
+            *traceStream_ << "CPU OAMDMA write pc=$" << std::hex
+                          << currentInstructionAddress_ << " opcode=$"
+                          << static_cast<unsigned>(currentOpcode_) << " page=$"
+                          << static_cast<unsigned>(value) << std::dec << '\n';
+        }
+        const std::uint16_t ramAddress = address & 0x07ffu;
+        if (ramAddress >= 0x0200u && ramAddress < 0x0300u &&
+            ((ramAddress - 0x0200u) & 0x03u) == 0) {
+            const std::size_t index = (ramAddress - 0x0200u) / 4;
+            if (!hasShadowOamY_[index] || lastShadowOamY_[index] != value) {
+                *traceStream_ << "CPU shadow-OAM Y write pc=$" << std::hex
+                              << currentInstructionAddress_ << " opcode=$"
+                              << static_cast<unsigned>(currentOpcode_) << " addr=$"
+                              << ramAddress << " value=$"
+                              << static_cast<unsigned>(value) << std::dec << '\n';
+                lastShadowOamY_[index] = value;
+                hasShadowOamY_[index] = true;
+            }
+        }
+    }
     bus_.write(address, value);
 }
 
@@ -143,7 +179,9 @@ std::uint8_t Cpu6502::step() {
         return 7;
     }
 
+    currentInstructionAddress_ = pc;
     const std::uint8_t opcode = fetch();
+    currentOpcode_ = opcode;
     std::uint8_t cycles = 2;
     switch (opcode) {
     case 0x00: { push(static_cast<std::uint8_t>(pc >> 8)); push(static_cast<std::uint8_t>(pc)); push(status | breakFlag | unusedFlag); status |= interruptDisableFlag; pc = read(0xfffe) | (read(0xffff) << 8); cycles = 7; break; }
@@ -298,8 +336,8 @@ std::uint8_t Cpu6502::step() {
     case 0xc4: compare(y, read(fetch())); cycles = 3; break;
     case 0xcc: compare(y, read(fetchWord())); cycles = 4; break;
 
-    case 0x24: { std::uint8_t value = read(fetch()); if (value & a & 0x40) status |= overflowFlag; else status &= ~overflowFlag; status = (status & ~(zeroFlag | negativeFlag)) | ((a & value) == 0 ? zeroFlag : 0) | (value & negativeFlag); cycles = 3; break; }
-    case 0x2c: { std::uint8_t value = read(fetchWord()); if (value & a & 0x40) status |= overflowFlag; else status &= ~overflowFlag; status = (status & ~(zeroFlag | negativeFlag)) | ((a & value) == 0 ? zeroFlag : 0) | (value & negativeFlag); cycles = 4; break; }
+    case 0x24: { std::uint8_t value = read(fetch()); if (value & 0x40) status |= overflowFlag; else status &= ~overflowFlag; status = (status & ~(zeroFlag | negativeFlag)) | ((a & value) == 0 ? zeroFlag : 0) | (value & negativeFlag); cycles = 3; break; }
+    case 0x2c: { std::uint8_t value = read(fetchWord()); if (value & 0x40) status |= overflowFlag; else status &= ~overflowFlag; status = (status & ~(zeroFlag | negativeFlag)) | ((a & value) == 0 ? zeroFlag : 0) | (value & negativeFlag); cycles = 4; break; }
 
     case 0x0a: a = asl(a); cycles = 2; break;
     case 0x06: { std::uint16_t address = fetch(); write(address, asl(read(address))); cycles = 5; break; }

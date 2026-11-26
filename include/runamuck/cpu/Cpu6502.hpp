@@ -2,7 +2,9 @@
 
 #include "runamuck/cpu/Bus.hpp"
 
+#include <array>
 #include <cstdint>
+#include <iosfwd>
 
 namespace runamuck {
 
@@ -23,6 +25,7 @@ public:
     std::uint8_t step();
     void nmi();
     void irq();
+    void setTraceStream(std::ostream* stream) noexcept { traceStream_ = stream; }
 
     std::uint16_t pc = 0;
     std::uint8_t sp = 0xfd;
@@ -35,6 +38,12 @@ private:
     Bus& bus_;
     bool nmiPending_ = false;
     bool irqPending_ = false;
+    std::ostream* traceStream_ = nullptr;
+    std::uint16_t currentInstructionAddress_ = 0;
+    std::uint8_t currentOpcode_ = 0;
+    mutable std::uint32_t statusReadCount_ = 0;
+    std::array<std::uint8_t, 64> lastShadowOamY_{};
+    std::array<bool, 64> hasShadowOamY_{};
 
     std::uint8_t read(std::uint16_t address) const;
     void write(std::uint16_t address, std::uint8_t value);
